@@ -1,0 +1,75 @@
+diff --git a/sbitx.c b/sbitx.c
+index abc123..def456 100644
+--- a/sbitx.c
++++ b/sbitx.c
+@@ -120,6 +120,7 @@ enum {
+     MODE_USB,
+     MODE_LSB,
+     MODE_CW,
++    MODE_FM, // Add FM mode
+     MODE_CWR,
+     MODE_DIGITAL
+ };
+@@ -600,6 +601,22 @@ void tx_process(
+         return;
+     }
+ 
++    // FM Mode
++    if (tx_list->mode == MODE_FM) {
++        static double phase = 0.0;
++        double frequency_deviation = 5000; // 5 kHz deviation
++        double carrier_frequency = 144000000; // Example carrier frequency
++        double carrier_amplitude = 1.0; // Scaled amplitude
++        double sample_rate = 48000.0; // Sample rate
++
++        for (int i = 0; i < n_samples; i++) {
++            phase += 2 * M_PI * frequency_deviation * input_mic[i] / 2000000000.0;
++            if (phase > 2 * M_PI) phase -= 2 * M_PI;
++            if (phase < -2 * M_PI) phase += 2 * M_PI;
++            output_tx[i] = carrier_amplitude * cos(2 * M_PI * carrier_frequency * i / sample_rate + phase);
++        }
++        return;
++    }
+ 
+     // Other modes (USB, LSB, etc.)
+     if (tx_list->mode == MODE_USB || tx_list->mode == MODE_LSB) {
+@@ -700,6 +717,36 @@ void rx_linear(
+         return;
+     }
+ 
++    // FM Mode
++    if (rx_list->mode == MODE_FM) {
++        static double previous_phase = 0.0;
++        double phase_difference = 0.0;
++
++        for (int i = 1; i < n_samples; i++) {
++            double real_part = __real__ fft_out[i];
++            double imag_part = __imag__ fft_out[i];
++
++            // Calculate instantaneous phase difference
++            double current_phase = atan2(imag_part, real_part);
++            phase_difference = current_phase - previous_phase;
++
++            // Handle phase wrapping
++            if (phase_difference > M_PI) phase_difference -= 2 * M_PI;
++            if (phase_difference < -M_PI) phase_difference += 2 * M_PI;
++
++            // Output demodulated signal
++            output_speaker[i] = phase_difference * sample_rate / (2 * M_PI * frequency_deviation);
++            previous_phase = current_phase;
++        }
++        return;
++    }
+ 
+     // Other modes (USB, LSB, etc.)
+     if (rx_list->mode == MODE_USB || rx_list->mode == MODE_LSB) {
++        // ...
++    }
++}
+ 
++void sdr_request(char *request, char *response) {
++    if (!strcmp(cmd, "r1:mode") && !strcmp(value, "FM")) {
++        rx_list->mode = MODE_FM;
++        tx_list->mode = MODE_FM;
++    }
+ }
