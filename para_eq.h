@@ -44,4 +44,3 @@ extern int eq_is_enabled;
 extern int rx_eq_is_enabled;
 
 #endif /* PARA_EQ_H_ */
-
